@@ -20,4 +20,19 @@ describe 'My behaviour' do
     s.send_msg(p, 'Hello, World!')
     puts 'done'
   end
+
+  it 'telephone' do
+    s = Scheduler.new
+    chain = 5.downto(1).inject([]) do |chain, i|
+      dest = chain.first
+      p = s.spawn do
+        s.receive do |msg|
+          puts "process #{i} got: #{msg}"
+          s.send_msg(dest, "#{msg} from #{i}") if dest
+        end
+      end
+      [p, *chain]
+    end
+    s.send_msg(chain.first, 'gossip')
+  end
 end
