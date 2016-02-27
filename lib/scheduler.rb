@@ -1,4 +1,5 @@
 require 'singleton'
+require 'match_receive'
 
 class Scheduler
   include Singleton
@@ -11,8 +12,8 @@ class Scheduler
     @scheduling_disabled = false
   end
 
-  def spawn(&block)
-    p = Process.new(&block)
+  def spawn(linked: false, &block)
+    p = Process.new(linked: linked, &block)
     @waiting.delete(p)
     @runnable.push(p)
     schedule
@@ -28,9 +29,14 @@ class Scheduler
     if timeout_ms
       add_timer(@running, timeout_ms)
     end
-    Fiber.yield
-    msg = @running.mailbox.shift
-    block.call(msg)
+    loop do
+      result = MatchReceive.instance.receive(@running.mailbox, &block)
+      if result == :__no_match__
+        wait_me
+      else
+        return result
+      end
+    end
   end
 
   def current_process
@@ -48,45 +54,68 @@ class Scheduler
     process.kill
   end
 
+  def exit_process
+    kill_me
+  end
+
   private
 
   def schedule
-    loop do
-      break if @scheduling_disabled
-      while @timers.any? && @timers.first.instant < Time.now
-        t = @timers.shift
-        send_msg(t.process, :timeout)
+    if @running
+      defer_me
+    else
+      loop do
+        break if @scheduling_disabled
+        while @timers.any? && @timers.first.instant < Time.now
+          t = @timers.shift
+          send_msg(t.process, :timeout)
+        end
+        newly_runnable, still_waiting = @waiting.partition{|p| p.mailbox.any?}
+        @runnable += newly_runnable
+        @waiting = still_waiting
+        @runnable.reject!(&:exited)
+        break if @runnable.none?
+        p = @runnable.shift
+        @running = p
+        p.fiber.resume
+        @running = nil
       end
-      newly_runnable, still_waiting = @waiting.partition{|p| p.mailbox.any?}
-      @runnable += newly_runnable
-      @waiting = still_waiting
-      @runnable.reject!(&:exited)
-      break if @runnable.none?
-      p = @runnable.shift
-      @running = p
-      p.fiber.resume
-      @running = nil
-      unless p.exited
-        @waiting.push(p)
-      end
-    end
-    if @timers.any?
+      if @timers.any?
       # At least one process is waiting on a timer. Sleep until the earliest one needs to be woken up.
-      sleep(@timers.first.instant - Time.now)
-      schedule
+        sleep(@timers.first.instant - Time.now)
+        schedule
+      end
     end
+  end
+
+  def wait_me
+    @waiting.push(@running)
+    Fiber.yield
+  end
+
+  def defer_me
+    @runnable.push(@running)
+    Fiber.yield
+  end
+
+  def kill_me
+    Fiber.yield
   end
 
   class Process
     attr_reader :fiber, :mailbox, :exited
 
-    def initialize(&block)
+    def initialize(linked: false, &block)
       @mailbox = []
       @fiber = Fiber.new do
         begin
           block.call
         rescue Exception => e
-          puts "process #{self} exited: #{e.message}"
+          if linked
+            raise e
+          else
+            puts "EXITED process #{self}: #{e.message}"
+          end
         ensure
           @exited = true
         end
