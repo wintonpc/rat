@@ -3,6 +3,7 @@ class Scheduler
   def initialize
     @runnable = []
     @waiting = []
+    @running = nil
   end
 
   def spawn(&block)
@@ -10,6 +11,18 @@ class Scheduler
     @waiting.delete(p)
     @runnable.push(p)
     schedule
+    p
+  end
+
+  def send_msg(process, msg)
+    process.mailbox.push(msg)
+    schedule
+  end
+
+  def receive(&block)
+    Fiber.yield
+    msg = @running.mailbox.shift
+    block.call(msg)
   end
 
   private
@@ -21,17 +34,23 @@ class Scheduler
       @waiting = still_waiting
       break if @runnable.none?
       p = @runnable.shift
+      @running = p
       p.fiber.resume
+      @running = nil
+      unless p.exited
+        @waiting.push(p)
+      end
     end
   end
 
   class Process
-    attr_reader :fiber, :mailbox
+    attr_reader :fiber, :mailbox, :exited
 
     def initialize(&block)
       @mailbox = []
       @fiber = Fiber.new do
         block.call
+        @exited = true
       end
     end
   end
