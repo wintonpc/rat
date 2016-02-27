@@ -25,6 +25,10 @@ class Scheduler
     block.call(msg)
   end
 
+  def current_process
+    @running
+  end
+
   private
 
   def schedule

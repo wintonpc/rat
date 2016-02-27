@@ -35,4 +35,25 @@ describe 'My behaviour' do
     end
     s.send_msg(chain.first, 'gossip')
   end
+
+  it 'ping pong' do
+    s = Scheduler.new
+    pinger = make_pinger_or_ponger(s, 'ping')
+    ponger = make_pinger_or_ponger(s, 'pong')
+    s.send_msg(pinger, [ponger, 'hello', 10])
+  end
+
+  def make_pinger_or_ponger(s, name)
+    s.spawn do
+      loop do
+        s.receive do |msg|
+          sender, content, remaining = msg
+          puts "#{name} got #{content}, #{remaining} remain"
+          if remaining > 0
+            s.send_msg(sender, [s.current_process, content, remaining - 1])
+          end
+        end
+      end
+    end
+  end
 end
