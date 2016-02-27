@@ -69,4 +69,26 @@ describe 'My behaviour' do
       end
     end
   end
+
+  it 'fast and slow' do
+    s = Scheduler.new
+    s.run do
+      fast = s.spawn do
+        loop do
+          s.receive(300) { puts 'fast' }
+        end
+      end
+      slow = s.spawn do
+        loop do
+          s.receive(1000) { puts 'slow' }
+        end
+      end
+      s.spawn do
+        s.receive(5000) do
+          s.kill(fast)
+          s.kill(slow)
+        end
+      end
+    end
+  end
 end

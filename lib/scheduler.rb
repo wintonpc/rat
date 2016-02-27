@@ -5,6 +5,7 @@ class Scheduler
     @waiting = []
     @running = nil
     @timers = []
+    @scheduling_disabled = false
   end
 
   def spawn(&block)
@@ -33,10 +34,22 @@ class Scheduler
     @running
   end
 
+  def run
+    @scheduling_disabled = true
+    yield
+    @scheduling_disabled = false
+    schedule
+  end
+
+  def kill(process)
+    process.kill
+  end
+
   private
 
   def schedule
     loop do
+      break if @scheduling_disabled
       while @timers.any? && @timers.first.instant < Time.now
         t = @timers.shift
         send_msg(t.process, :timeout)
@@ -44,6 +57,7 @@ class Scheduler
       newly_runnable, still_waiting = @waiting.partition{|p| p.mailbox.any?}
       @runnable += newly_runnable
       @waiting = still_waiting
+      @runnable.reject!(&:exited)
       break if @runnable.none?
       p = @runnable.shift
       @running = p
@@ -69,6 +83,10 @@ class Scheduler
         block.call
         @exited = true
       end
+    end
+
+    def kill
+      @exited = true
     end
   end
 
