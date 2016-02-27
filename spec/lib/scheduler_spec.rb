@@ -87,4 +87,30 @@ describe 'My behaviour' do
       end
     end
   end
+
+  it 'exceptions' do
+    spawn_multiple do
+      fast = spawn do
+        loop do
+          receive(300) { puts 'fast' }
+        end
+      end
+      slow = spawn do
+        loop do
+          sleep(1000)
+          raise 'crash'
+        end
+      end
+      spawn do
+        receive(2000) do
+          kill(fast)
+          kill(slow)
+        end
+      end
+    end
+  end
+
+  def sleep(ms)
+    receive(ms) { }
+  end
 end

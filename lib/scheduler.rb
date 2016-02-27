@@ -83,8 +83,13 @@ class Scheduler
     def initialize(&block)
       @mailbox = []
       @fiber = Fiber.new do
-        block.call
-        @exited = true
+        begin
+          block.call
+        rescue Exception => e
+          puts "process #{self} exited: #{e.message}"
+        ensure
+          @exited = true
+        end
       end
     end
 
