@@ -56,4 +56,17 @@ describe 'My behaviour' do
       end
     end
   end
+
+  it 'timer' do
+    s = Scheduler.new
+    s.spawn do
+      s.receive(1000) do |msg|
+        if msg == :timeout
+          puts 'timed out'
+        else
+          raise 'oops'
+        end
+      end
+    end
+  end
 end
