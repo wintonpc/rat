@@ -1,4 +1,7 @@
+require 'singleton'
+
 class Scheduler
+  include Singleton
 
   def initialize
     @runnable = []
@@ -34,7 +37,7 @@ class Scheduler
     @running
   end
 
-  def run
+  def spawn_multiple
     @scheduling_disabled = true
     yield
     @scheduling_disabled = false
